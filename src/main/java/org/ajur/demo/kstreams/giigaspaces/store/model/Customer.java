@@ -9,6 +9,8 @@ import com.gigaspaces.document.SpaceDocument;
 import com.gigaspaces.metadata.StorageType;
 import com.gigaspaces.metadata.index.SpaceIndexType;
 
+import java.util.Objects;
+
 
 public class Customer {
 
@@ -44,4 +46,5 @@ public class Customer {
                 ", id='" + id + '\'' +
                 '}';
     }
+
 }

@@ -1,10 +1,10 @@
 package org.ajur.demo.kstreams.giigaspaces.store.gks;
 
+import com.gigaspaces.client.iterator.SpaceIterator;
 import com.gigaspaces.document.SpaceDocument;
 import com.gigaspaces.metadata.SpaceTypeDescriptor;
 import com.gigaspaces.metadata.SpaceTypeDescriptorBuilder;
 import com.gigaspaces.metadata.index.SpaceIndexType;
-import com.gigaspaces.query.IdQuery;
 import com.j_spaces.core.client.SQLQuery;
 import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.utils.Bytes;
@@ -36,6 +36,21 @@ public class GigaSpacesKeyValueStoreOld<K,V>  implements KeyValueStore<Bytes, by
     private Serde<V> valueSerde;
 
     private GigaSpacePropertiesExtractor<V> spaceValueExtractor;
+
+
+    /**
+     * For testing
+     *
+     * @param client
+     * @param storeName
+     * @param typeName
+     */
+    protected GigaSpacesKeyValueStoreOld(GigaSpace client, String storeName, final String typeName ) {
+
+        this.storeName = storeName;
+        this.typeName = typeName;
+        this.client = client;
+    }
 
     public GigaSpacesKeyValueStoreOld(GigaSpace client, String storeName) {
 
@@ -78,7 +93,7 @@ public class GigaSpacesKeyValueStoreOld<K,V>  implements KeyValueStore<Bytes, by
 
 
         final SpaceTypeDescriptorBuilder  docBuilder = new SpaceTypeDescriptorBuilder(this.typeName)
-                .idProperty("key", false)
+               // .idProperty("key", false)
                 .addFixedProperty("key", byte[].class)
                 .addFixedProperty("value", byte[].class);
 
@@ -93,6 +108,7 @@ public class GigaSpacesKeyValueStoreOld<K,V>  implements KeyValueStore<Bytes, by
             docBuilder.addPropertyIndex("strongTypedKey", SpaceIndexType.EQUAL);
 
             docBuilder.addFixedProperty("strongTypedValue", this.valueType);
+
 
             if (this.spaceValueExtractor !=null) {
 
@@ -128,12 +144,11 @@ public class GigaSpacesKeyValueStoreOld<K,V>  implements KeyValueStore<Bytes, by
     @Override
     public void put(Bytes key, byte[] value) {
 
-
+        // TODO Add update support
         if (this.getDoc(key.get()) != null) {
 
             return;
         }
-
 
         final Map<String, Object> objectProps = new HashMap<>();
         objectProps.put("key", key.get());
@@ -151,6 +166,7 @@ public class GigaSpacesKeyValueStoreOld<K,V>  implements KeyValueStore<Bytes, by
             final V strongTypedValue = valueAndTimestamp.value();
             final K strongTypedKey = this.keySerde.deserializer().deserialize("", key.get());
 
+            // Stored  deserialized  key
             objectProps.put("strongTypedKey", strongTypedKey);
 
             if (this.spaceValueExtractor != null) {
@@ -161,7 +177,9 @@ public class GigaSpacesKeyValueStoreOld<K,V>  implements KeyValueStore<Bytes, by
 
         }
 
-        this.client.write(new SpaceDocument(this.typeName,objectProps));
+        final SpaceDocument spaceDoc = new SpaceDocument(this.typeName,objectProps);
+
+        this.client.write(spaceDoc);
 
     }
 
@@ -262,12 +280,43 @@ public class GigaSpacesKeyValueStoreOld<K,V>  implements KeyValueStore<Bytes, by
     @Override
     public KeyValueIterator<Bytes, byte[]> range(Bytes from, Bytes to) {
 
-        throw  new UnsupportedOperationException("range");
+        if (from.compareTo(to) > 0) {
+
+            return new SpaceEmptyKeyValueIterator();
+        }
+
+        final NavigableMap<Bytes, byte[]> map = new TreeMap<>();
+        KeyValueIterator<Bytes, byte[]> iter = null;
+
+        try {
+
+            iter = all();
+
+            while(iter.hasNext()) {
+
+                final  KeyValue<Bytes, byte[]> keyVal = iter.next();
+                map.put(keyVal.key, keyVal.value);
+            }
+        }
+        finally {
+
+            if (iter != null) {
+
+                iter.close();
+            }
+        }
+
+        final Map<Bytes, byte[]> subMap = map.subMap(from, to);
+
+        return  new SpaceInMemoryKeyValueIterator(subMap);
     }
 
     @Override
     public KeyValueIterator<Bytes, byte[]> all() {
-        throw  new UnsupportedOperationException("all");
+
+        final  KeyValueIterator<Bytes, byte[]> iter = new SpaceKeyValueIterator();
+
+        return iter;
     }
 
     @Override
@@ -331,6 +380,114 @@ public class GigaSpacesKeyValueStoreOld<K,V>  implements KeyValueStore<Bytes, by
         final SpaceDocument result = this.client.read(query);
 
         return result;
+    }
+
+
+
+    /**
+     * Space KeyValue iterator
+     */
+    private class SpaceKeyValueIterator implements KeyValueIterator<Bytes, byte[]> {
+
+        final SpaceIterator<SpaceDocument> spaceIter;
+
+        private SpaceKeyValueIterator() {
+
+            // Create space iterator
+            final SQLQuery<SpaceDocument> query =
+                    new SQLQuery<SpaceDocument>(typeName, "strongTypedKey != ?");
+
+            // TODO Use random key
+            query.setParameter(1, "");
+
+            this.spaceIter = client.iterator(query);
+        }
+
+        @Override
+        public boolean hasNext() {
+
+            return this.spaceIter.hasNext();
+        }
+
+        @Override
+        public KeyValue<Bytes, byte[]> next() {
+
+            final SpaceDocument spaceDoc = this.spaceIter.next();
+            final byte[] value = spaceDoc.getProperty("value");
+
+            // TODO Do we need to wrap byte[]
+            final Bytes key = Bytes.wrap(spaceDoc.getProperty("key"));
+
+           return new KeyValue<>(key, value);
+        }
+
+        @Override
+        public void close() {
+
+            this.spaceIter.close();
+        }
+
+        @Override
+        public Bytes peekNextKey() {
+            throw new UnsupportedOperationException("peekNextKey() not supported in " + getClass().getName());
+        }
+
+    }
+
+    private class SpaceInMemoryKeyValueIterator implements KeyValueIterator<Bytes, byte[]> {
+
+        private final Iterator<Bytes> iter;
+        private Map<Bytes, byte[]> map;
+
+
+        private SpaceInMemoryKeyValueIterator(final Map<Bytes, byte[]> map ) {
+            this.map = map;
+            this.iter = this.map.keySet().iterator();
+        }
+
+        @Override
+        public boolean hasNext() {
+            return iter.hasNext();
+        }
+
+        @Override
+        public KeyValue<Bytes, byte[]> next() {
+            final Bytes key = iter.next();
+            return new KeyValue<>(key, map.get(key));
+        }
+
+        @Override
+        public void close() {
+            // do nothing
+        }
+
+        @Override
+        public Bytes peekNextKey() {
+            throw new UnsupportedOperationException("peekNextKey() not supported in " + getClass().getName());
+        }
+    }
+
+    private static class SpaceEmptyKeyValueIterator<K, V> implements KeyValueIterator<K, V> {
+
+        @Override
+        public void close() {
+        }
+
+        @Override
+        public K peekNextKey() {
+            throw new NoSuchElementException();
+        }
+
+        @Override
+        public boolean hasNext() {
+            return false;
+        }
+
+        @Override
+        public KeyValue<K, V> next() {
+            throw new NoSuchElementException();
+        }
+
     }
 
 }
