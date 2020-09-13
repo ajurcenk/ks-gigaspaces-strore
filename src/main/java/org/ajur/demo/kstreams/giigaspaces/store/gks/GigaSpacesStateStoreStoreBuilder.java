@@ -2,18 +2,20 @@ package org.ajur.demo.kstreams.giigaspaces.store.gks;
 
 import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.utils.Bytes;
+import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.streams.processor.StateStore;
 import org.apache.kafka.streams.state.KeyValueStore;
 import org.apache.kafka.streams.state.StoreBuilder;
-import org.apache.kafka.streams.state.internals.ChangeLoggingKeyValueBytesStore;
 import org.apache.kafka.streams.state.internals.GigaSpacesChangeLoggingKeyValueBytesStore;
+import org.apache.kafka.streams.state.internals.GigaSpacesMeteredKeyValueStore;
+import org.apache.kafka.streams.state.internals.MeteredKeyValueStore;
 import org.openspaces.core.GigaSpace;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 
-public class GigaSpacesKeyValueAbstractStoreBuilder<K,V extends StateStore> implements StoreBuilder<KeyValueStore<Bytes, byte[]>> {
+public class GigaSpacesStateStoreStoreBuilder<K,V extends StateStore> implements StoreBuilder<KeyValueStore<Bytes, byte[]>> {
 
     private String storeName;
     private GigaSpace client;
@@ -26,9 +28,9 @@ public class GigaSpacesKeyValueAbstractStoreBuilder<K,V extends StateStore> impl
     boolean enableCaching;
     boolean enableLogging = false;
 
-    public GigaSpacesKeyValueAbstractStoreBuilder(String storeName, GigaSpace client, Serde<K> keySerde,
-                                                  Class<K> keyType, Serde<V> valueSerde, Class<V> valueType,
-                                                  GigaSpacePropertiesExtractor<V> spacePropertiesExtractor) {
+    public GigaSpacesStateStoreStoreBuilder(String storeName, GigaSpace client, Serde<K> keySerde,
+                                            Class<K> keyType, Serde<V> valueSerde, Class<V> valueType,
+                                            GigaSpacePropertiesExtractor<V> spacePropertiesExtractor) {
         this.storeName = storeName;
         this.client = client;
         this.keySerde = keySerde;
@@ -89,18 +91,31 @@ public class GigaSpacesKeyValueAbstractStoreBuilder<K,V extends StateStore> impl
     @Override
     public  KeyValueStore<Bytes, byte[]> build() {
 
-        GigaSpacesKeyValueStoreOld store =  new GigaSpacesKeyValueStoreOld(client, storeName,
+       final  GigaSpacesStateStore store =  new GigaSpacesStateStore(client, storeName,
                 keyType, valueType, keySerde,
                 valueSerde,spacePropertiesExtractor);
 
-        return store;
+        final KeyValueStore<Bytes, byte[]> loggingStore =   maybeWrapLogging(store);
+
+        final KeyValueStore<Bytes, byte[]> meteredStore =  new GigaSpacesMeteredKeyValueStore(
+                loggingStore,
+                "giga-store-in-memory",
+                Time.SYSTEM,
+                keySerde,
+                valueSerde);
+
+        return meteredStore;
 
     }
 
     private KeyValueStore<Bytes, byte[]> maybeWrapLogging(final KeyValueStore<Bytes, byte[]> inner) {
+
+
         if (!enableLogging) {
+
             return inner;
         }
+
         return new GigaSpacesChangeLoggingKeyValueBytesStore(inner);
     }
 }

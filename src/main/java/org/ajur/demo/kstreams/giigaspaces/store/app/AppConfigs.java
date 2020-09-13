@@ -13,7 +13,7 @@ public class AppConfigs {
 
     public static String TOPIC_ORDERS = "testks.orders";
     public static String TOPIC_CUSTOMERS = "testks.customers";
-
+    public static String TOPIC_INVOICES = "testks.invoices";
 
     public static Properties getSecurityConfig() {
 
