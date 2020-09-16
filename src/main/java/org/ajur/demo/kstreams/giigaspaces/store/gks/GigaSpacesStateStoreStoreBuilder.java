@@ -10,6 +10,7 @@ import org.apache.kafka.streams.state.internals.GigaSpacesChangeLoggingKeyValueB
 import org.apache.kafka.streams.state.internals.GigaSpacesMeteredKeyValueStore;
 import org.apache.kafka.streams.state.internals.MeteredKeyValueStore;
 import org.openspaces.core.GigaSpace;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -28,6 +29,12 @@ public class GigaSpacesStateStoreStoreBuilder<K,V extends StateStore> implements
     boolean enableCaching;
     boolean enableLogging = false;
 
+    /**
+     * Transactions support
+     */
+    boolean enableSpaceTransactions = false;
+    private PlatformTransactionManager ptm;
+
     public GigaSpacesStateStoreStoreBuilder(String storeName, GigaSpace client, Serde<K> keySerde,
                                             Class<K> keyType, Serde<V> valueSerde, Class<V> valueType,
                                             GigaSpacePropertiesExtractor<V> spacePropertiesExtractor) {
@@ -38,6 +45,22 @@ public class GigaSpacesStateStoreStoreBuilder<K,V extends StateStore> implements
         this.valueSerde = valueSerde;
         this.valueType = valueType;
         this.spacePropertiesExtractor = spacePropertiesExtractor;
+    }
+
+    public GigaSpacesStateStoreStoreBuilder(String storeName, GigaSpace client, Serde<K> keySerde,
+                                            Class<K> keyType, Serde<V> valueSerde, Class<V> valueType,
+                                            GigaSpacePropertiesExtractor<V> spacePropertiesExtractor, PlatformTransactionManager ptm) {
+
+        // TODO Use super
+        this.storeName = storeName;
+        this.client = client;
+        this.keySerde = keySerde;
+        this.keyType = keyType;
+        this.valueSerde = valueSerde;
+        this.valueType = valueType;
+        this.spacePropertiesExtractor = spacePropertiesExtractor;
+
+        this.ptm = ptm;
     }
 
     private GigaSpacePropertiesExtractor<V> spacePropertiesExtractor;
@@ -52,6 +75,17 @@ public class GigaSpacesStateStoreStoreBuilder<K,V extends StateStore> implements
         return this;
     }
 
+
+    public StoreBuilder< KeyValueStore<Bytes, byte[]>> withSpaceTransactionsEnabled() {
+        this.enableSpaceTransactions = true;
+        return this;
+    }
+
+
+    public StoreBuilder< KeyValueStore<Bytes, byte[]>> withSpaceTransactionsDisabled() {
+        this.enableSpaceTransactions = false;
+        return this;
+    }
 
 
     @Override
@@ -91,9 +125,19 @@ public class GigaSpacesStateStoreStoreBuilder<K,V extends StateStore> implements
     @Override
     public  KeyValueStore<Bytes, byte[]> build() {
 
-       final  GigaSpacesStateStore store =  new GigaSpacesStateStore(client, storeName,
+
+        if (this.enableSpaceTransactions && ptm==null) {
+
+            throw new IllegalStateException("Transaction manager is not set.");
+        }
+
+        final KeyValueStore store = this.enableSpaceTransactions ? new GigaSpacesTransactionalStateStore(client, storeName,
                 keyType, valueType, keySerde,
-                valueSerde,spacePropertiesExtractor);
+                valueSerde, spacePropertiesExtractor, ptm) :
+                new GigaSpacesStateStore(client, storeName,
+                        keyType, valueType, keySerde,
+                        valueSerde, spacePropertiesExtractor);
+
 
         final KeyValueStore<Bytes, byte[]> loggingStore =   maybeWrapLogging(store);
 
