@@ -67,7 +67,7 @@ public class GigaSpacesTransactionsTest {
         final TransactionStatus status = ptm.getTransaction(definition);
         try {
 
-            final SpaceDocument spaceDocument = createSpaceDoc("2", "test-2");
+            final SpaceDocument spaceDocument = createSpaceDoc("1", "test-1");
             client.write(spaceDocument);
 
             this.ptm.commit(status);
@@ -224,7 +224,8 @@ public class GigaSpacesTransactionsTest {
     @Test
     public void testConcurrentReadIfObjectIsNotExists() {
 
-        final String key = "11";
+        final String key = "key-" + System.currentTimeMillis();
+        final String value = "value-" + System.currentTimeMillis();
 
         final DefaultTransactionDefinition definition = new DefaultTransactionDefinition();
         definition.setPropagationBehavior(Propagation.REQUIRES_NEW.ordinal());
@@ -246,11 +247,72 @@ public class GigaSpacesTransactionsTest {
             definition_1.setPropagationBehavior(Propagation.REQUIRES_NEW.ordinal());
 
             // Start transaction
+            final TransactionStatus status_1 = ptm.getTransaction(definition_1);
+
+            System.out.println("Reading space document in thread " + threadName);
+            final SpaceDocument spaceDoc_1 = client.readById(new IdQuery<SpaceDocument>(SPACE_DOC_TYPE, key), 2000, ReadModifiers.EXCLUSIVE_READ_LOCK);
+            System.out.println("Space document is the thread " + threadName + " space doc: " + spaceDoc_1);
+
+            System.out.println("Commit transaction in the thread " + threadName);
+            this.ptm.commit(status_1);
+
+            countDownLatch.countDown();
+        };
+
+        // Stat new transaction to access the same document
+        Thread thread = new Thread(task);
+        thread.start();
+
+        // Create document
+        final SpaceDocument newDoc = createSpaceDoc(key,value);
+        this.client.write(newDoc);
+
+        // Pause main thread
+        try {
+            Thread.sleep(1000L);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
+        this.ptm.commit(status);
+        System.out.println("Transaction is committed in the main thread");
+
+        try {
+            countDownLatch.await();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+
+
+    @Test
+    public void testPessimisticLockingWithRead() {
+
+        final DefaultTransactionDefinition definition = new DefaultTransactionDefinition();
+        definition.setPropagationBehavior(Propagation.REQUIRES_NEW.ordinal());
+
+        // Start transaction
+        final TransactionStatus status = ptm.getTransaction(definition);
+        System.out.println("Transaction is started in the main thread");
+
+        final SpaceDocument spaceDoc = client.readById(new IdQuery<SpaceDocument>(SPACE_DOC_TYPE, "1"), 500, ReadModifiers.EXCLUSIVE_READ_LOCK);
+
+        final CountDownLatch countDownLatch = new CountDownLatch(1);
+
+        Runnable task = () -> {
+
+            String threadName = Thread.currentThread().getName();
+            System.out.println("Starting transaction in the thread " + threadName);
+
+            final DefaultTransactionDefinition definition_1 = new DefaultTransactionDefinition();
+            definition_1.setPropagationBehavior(Propagation.REQUIRES_NEW.ordinal());
+
+            // Start transaction
             final TransactionStatus status_1 = ptm.getTransaction(definition);
 
             System.out.println("Reading space document in thread " + threadName);
-            final SpaceDocument spaceDoc_1 = client.readById(new IdQuery<SpaceDocument>(SPACE_DOC_TYPE, key), 1000, ReadModifiers.EXCLUSIVE_READ_LOCK);
-            System.out.println("Space document is the thread " + threadName + " space doc: " + spaceDoc_1);
+            final SpaceDocument spaceDoc_1 = client.readById(new IdQuery<SpaceDocument>(SPACE_DOC_TYPE, "1"), 1000000, ReadModifiers.EXCLUSIVE_READ_LOCK);
+            System.out.println("Space document is found in thread " + threadName + " space doc: " + spaceDoc_1);
 
             System.out.println("Commit transaction in the thread " + threadName);
             this.ptm.commit(status_1);

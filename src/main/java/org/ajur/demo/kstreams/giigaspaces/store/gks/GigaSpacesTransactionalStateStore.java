@@ -155,8 +155,14 @@ public class GigaSpacesTransactionalStateStore<K, V> implements KeyValueStore<By
 
         // Store wrapper support
         if (root != null) {
+
             // Add restore logic
-            context.register(root, (key, value) -> put(Bytes.wrap(key), value));
+            context.register(root, (key, value) -> {
+
+                // Not transactional restore
+                putNoTransactions(Bytes.wrap(key), value);
+
+            });
         }
 
     }
@@ -165,6 +171,16 @@ public class GigaSpacesTransactionalStateStore<K, V> implements KeyValueStore<By
     public void put(Bytes key, byte[] value) {
 
         final SpaceDocument existingDoc = this.getDoc(key.get());
+        final SpaceDocument spaceDoc = (existingDoc == null) ? createDoc(key, value) : populateDoc(value,existingDoc);
+
+        this.client.write(spaceDoc);
+
+    }
+
+
+    public void putNoTransactions(Bytes key, byte[] value) {
+
+        final SpaceDocument existingDoc = this.getDocNoTransactions(key.get());
         final SpaceDocument spaceDoc = (existingDoc == null) ? createDoc(key, value) : populateDoc(value,existingDoc);
 
         this.client.write(spaceDoc);
@@ -377,6 +393,16 @@ public class GigaSpacesTransactionalStateStore<K, V> implements KeyValueStore<By
         return spaceDoc;
     }
 
+    private SpaceDocument getDocNoTransactions(byte[] key) {
+
+        final String id = Base64.getEncoder().encodeToString(key);
+
+        // Read using isolation level
+        final SpaceDocument spaceDoc = client.readById(new IdQuery<SpaceDocument>(this.typeName, id));
+
+        return spaceDoc;
+    }
+
 
     /**
      * Space KeyValue iterator
@@ -388,6 +414,7 @@ public class GigaSpacesTransactionalStateStore<K, V> implements KeyValueStore<By
         private SpaceKeyValueIterator() {
 
             // Create space iterator
+            // TODO Incorrect parameter: isolationLevel - no supported. Fix it.
             final SQLQuery<SpaceDocument> query =
                     new SQLQuery<SpaceDocument>(typeName, "strongTypedKey != ?", transactionTimeout, isolationLevel);
 

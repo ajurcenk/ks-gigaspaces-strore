@@ -29,7 +29,7 @@ public class InvoicesSimulator {
     public static void simulateInvoices() throws ExecutionException, InterruptedException {
 
 
-        final int numberOfCustomers= 10;
+        final int numberOfCustomers= 1;
         int customerIdIdStart = 100;
 
         int i = 0;
@@ -45,14 +45,15 @@ public class InvoicesSimulator {
         }
 
         i = 0;
-        final int numberOfOrders = 0;
+        final int numberOfOrders = 10;
         int ordersIdStart = 5000;
 
         final Producer<String, Invoice> orderProducer = createInvoiceProducer();
 
         while(i <= numberOfOrders) {
 
-            final String customerId = "107";
+            final String customerId = "110";
+                    //"108";
                     //"" + getRandom(customerIds);
 
             final Invoice invoice = new Invoice();

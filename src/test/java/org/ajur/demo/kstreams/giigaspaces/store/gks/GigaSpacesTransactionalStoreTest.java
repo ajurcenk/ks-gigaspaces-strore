@@ -291,10 +291,6 @@ public class GigaSpacesTransactionalStoreTest {
         final String readValue = store.get(key);
         assertNotNull(readValue);
 
-        // Update document
-        System.out.println("Update document in the main thread for key: " + key);
-        store.put(key, updateValue);
-
         final CountDownLatch countDownLatch = new CountDownLatch(1);
 
         Runnable task = () -> {
@@ -334,6 +330,11 @@ public class GigaSpacesTransactionalStoreTest {
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
+
+
+        // Update document
+        System.out.println("Update document in the main thread for key: " + key);
+        store.put(key, updateValue);
 
         mainTran.commitTran();
         isTransactionCompletedInMainThread.set(true);
@@ -452,10 +453,6 @@ public class GigaSpacesTransactionalStoreTest {
         final String readValue = store.get(key);
         assertNull(readValue);
 
-        // Create document
-        System.out.println("Create document in the main thread for key: " + key);
-        store.put(key, updateValue);
-
         final CountDownLatch countDownLatch = new CountDownLatch(1);
 
         Runnable task = () -> {
@@ -469,7 +466,13 @@ public class GigaSpacesTransactionalStoreTest {
 
             System.out.println("Reading space document in thread " + threadName + " for key: " + key);
 
-            assertNotNull(store.get(key));
+            final String valueRead = store.get(key);
+
+            System.out.println("Read operation is completed the thread in thread " + threadName + " for key: " + key);
+
+            assertNotNull(valueRead);
+
+
             assertNotNull(updateValue.equals(store.get(key)));
             assertTrue(isTransactionCompletedInMainThread.get());
 
@@ -492,8 +495,12 @@ public class GigaSpacesTransactionalStoreTest {
             e.printStackTrace();
         }
 
-        mainTran.commitTran();
+        // Create document
+        System.out.println("Create document in the main thread for key: " + key);
+        store.put(key, updateValue);
+
         isTransactionCompletedInMainThread.set(true);
+        mainTran.commitTran();
 
         System.out.println("Transaction is committed in the main thread for key: " + key);
 
