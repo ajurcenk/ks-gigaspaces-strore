@@ -263,10 +263,6 @@ public class GigaSpacesTransactionsTest {
         Thread thread = new Thread(task);
         thread.start();
 
-        // Create document
-        final SpaceDocument newDoc = createSpaceDoc(key,value);
-        this.client.write(newDoc);
-
         // Pause main thread
         try {
             Thread.sleep(1000L);
@@ -274,7 +270,13 @@ public class GigaSpacesTransactionsTest {
             e.printStackTrace();
         }
 
+
+        // Create document
+        final SpaceDocument newDoc = createSpaceDoc(key,value);
+        this.client.write(newDoc);
+
         this.ptm.commit(status);
+
         System.out.println("Transaction is committed in the main thread");
 
         try {

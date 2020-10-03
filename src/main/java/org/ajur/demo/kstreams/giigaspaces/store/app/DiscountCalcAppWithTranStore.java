@@ -36,11 +36,14 @@ public class DiscountCalcAppWithTranStore {
 
         Properties props = new Properties();
 
-        props.put(StreamsConfig.APPLICATION_ID_CONFIG, "discount-calc-tran-store-v1");
+        props.put(StreamsConfig.APPLICATION_ID_CONFIG, "discount-calc-tran-store-v2");
         props.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, "kafka.alex.ga:9092");
+        props.put(StreamsConfig.NUM_STREAM_THREADS_CONFIG, 1);
         props.put("sasl.jaas.config", "org.apache.kafka.common.security.plain.PlainLoginModule required username=\"test\" password=\"test123\";");
         props.put("sasl.mechanism", "PLAIN");
         props.put("security.protocol", "SASL_PLAINTEXT");
+        props.put(StreamsConfig.CACHE_MAX_BYTES_BUFFERING_CONFIG, 0);
+        props.put(StreamsConfig.COMMIT_INTERVAL_MS_CONFIG, 0);
 
         props.put(StreamsConfig.DEFAULT_KEY_SERDE_CLASS_CONFIG, Serdes.String().getClass());
         props.put(StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG, Serdes.String().getClass());
@@ -81,7 +84,7 @@ public class DiscountCalcAppWithTranStore {
                         .withName("invoicesInputStream"));
 
         // Add time tracking
-        final KStream<String, InvoiceWrapper> invovesWrapper = invoicesInputStream.mapValues((readOnlyKey, value) -> {
+        final KStream<String, InvoiceWrapper> invoicesWrapper = invoicesInputStream.mapValues((readOnlyKey, value) -> {
 
             final InvoiceWrapper wrapper = new InvoiceWrapper();
             wrapper.setInvoice(value);
@@ -90,8 +93,8 @@ public class DiscountCalcAppWithTranStore {
             return wrapper;
         });
 
-        // Join customers and orders
-        final KStream<String, DiscountInfoWrapper> discountsStream = invovesWrapper
+        // Calculate customer discount
+        final KStream<String, DiscountInfoWrapper> discountsStream = invoicesWrapper
                 .transform(() -> {
 
                     return new DiscountLogicProcessorWithTranStore();
@@ -102,14 +105,15 @@ public class DiscountCalcAppWithTranStore {
         final KStream<String, DiscountInfoWrapper> discountsWithLatencyStream =
                 discountsStream.mapValues((readOnlyKey, value) -> {
 
-                    value.setStartTime(new Date());
+                    value.setEndTime(new Date());
                     return value;
                 });
 
 
         discountsWithLatencyStream.foreach((key, value) -> {
 
-            System.out.println(String.format("Customer number: %s Discount info: %s LatencyMS: %d",
+            System.out.println(String.format("Thread name: %s, Customer number: %s Discount info: %s LatencyMS: %d",
+                    Thread.currentThread().getName(),
                     value.getDiscountInfo().getCustomerCardNo(), value.getDiscountInfo().toString(),
                     value.getLatencyMs()));
         });

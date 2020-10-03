@@ -13,6 +13,7 @@ import org.ajur.demo.kstreams.giigaspaces.store.model.DiscountInfo;
 import org.ajur.demo.kstreams.giigaspaces.store.serdes.SerdesFactory;
 import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.serialization.Serdes;
+import org.apache.kafka.common.utils.Bytes;
 import org.apache.kafka.streams.processor.ProcessorContext;
 import org.apache.kafka.streams.processor.StateStore;
 import org.apache.kafka.streams.state.KeyValueIterator;
@@ -466,12 +467,11 @@ public class GigaSpacesTransactionalStoreTest {
 
             System.out.println("Reading space document in thread " + threadName + " for key: " + key);
 
-            final String valueRead = store.get(key);
+            //assertNotNull(transStore.get(Bytes.wrap(key.getBytes())));
 
             System.out.println("Read operation is completed the thread in thread " + threadName + " for key: " + key);
 
-            assertNotNull(valueRead);
-
+            assertNotNull(store.get(key));
 
             assertNotNull(updateValue.equals(store.get(key)));
             assertTrue(isTransactionCompletedInMainThread.get());
@@ -499,7 +499,7 @@ public class GigaSpacesTransactionalStoreTest {
         System.out.println("Create document in the main thread for key: " + key);
         store.put(key, updateValue);
 
-        isTransactionCompletedInMainThread.set(true);
+        isTransactionCompletedInMainThread.getAndSet(true);
         mainTran.commitTran();
 
         System.out.println("Transaction is committed in the main thread for key: " + key);

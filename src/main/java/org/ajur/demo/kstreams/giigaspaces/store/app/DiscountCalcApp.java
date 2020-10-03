@@ -31,11 +31,13 @@ public class DiscountCalcApp {
 
         Properties props = new Properties();
 
-        props.put(StreamsConfig.APPLICATION_ID_CONFIG, "discount-calc-v1");
+        props.put(StreamsConfig.APPLICATION_ID_CONFIG, "discount-calc-v2");
         props.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, "kafka.alex.ga:9092");
         props.put("sasl.jaas.config", "org.apache.kafka.common.security.plain.PlainLoginModule required username=\"test\" password=\"test123\";");
         props.put("sasl.mechanism", "PLAIN");
         props.put("security.protocol", "SASL_PLAINTEXT");
+        props.put(StreamsConfig.CACHE_MAX_BYTES_BUFFERING_CONFIG, 0);
+        props.put(StreamsConfig.COMMIT_INTERVAL_MS_CONFIG, 0);
 
         props.put(StreamsConfig.DEFAULT_KEY_SERDE_CLASS_CONFIG, Serdes.String().getClass());
         props.put(StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG, Serdes.String().getClass());
@@ -86,7 +88,7 @@ public class DiscountCalcApp {
         final KStream<String, DiscountInfoWrapper> discountsWithLatencyStream =
                 discountsStream.mapValues((readOnlyKey, value) -> {
 
-                    value.setStartTime(new Date());
+                    value.setEndTime(new Date());
                     return value;
                 });
 

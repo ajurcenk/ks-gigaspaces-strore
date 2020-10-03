@@ -5,9 +5,9 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 public class DiscountInfo {
 
     private String customerCardNo;
-    private Double totalAmount;
-    private Double earnedLoyaltyPoints;
-    private Double totalLoyaltyPoints;
+    private Double totalAmount = 0.00d;
+    private Double earnedLoyaltyPoints = 0.00d;
+    private Double totalLoyaltyPoints = 0.00d;
 
     public String getCustomerCardNo() {
         return customerCardNo;
